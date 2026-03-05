@@ -262,20 +262,43 @@ function cleanupNodeLlamaPackages(nodeModulesDir, platform, arch) {
   const mode = process.env.CLAWX_KEEP_LLAMA_GPU === '1' ? 'same-arch-with-gpu' : 'cpu-only';
   const targetCpu = LLAMA_CPU_VARIANTS[`${platform}:${arch}`] || null;
 
+  const variants = [];
+  for (const entry of readdirSync(scopeDir)) {
+    const meta = parseNodeLlamaVariant(entry);
+    if (meta) variants.push({ name: entry, meta });
+  }
+
+  const hasTargetPlatformArchVariant = variants.some(
+    v => v.meta.platform === platform && v.meta.arch === arch,
+  );
+  const hasTargetCpuVariant = targetCpu ? variants.some(v => v.name === targetCpu) : false;
+
+  // Guard rail: if no target platform/arch variant exists, this is likely a
+  // cross-platform build host mismatch (e.g. building --win on Linux with host-only
+  // optional deps installed). In that case, skip pruning to avoid deleting all
+  // node-llama-cpp binaries.
+  if (!hasTargetPlatformArchVariant) {
+    console.log(
+      `[after-pack] ⚠️  node-llama-cpp: no target variant found for ${platform}/${arch}; skipping prune to avoid over-removal.`,
+    );
+    return { removed: 0, kept: variants.length, mode: 'skip-no-target', targetCpu };
+  }
+
   let removed = 0;
   let kept = 0;
   const keptPkgs = [];
   const removedPkgs = [];
 
-  for (const entry of readdirSync(scopeDir)) {
-    const meta = parseNodeLlamaVariant(entry);
-    if (!meta) continue;
+  for (const { name: entry, meta } of variants) {
 
     const isTargetPlatform = meta.platform === platform;
     const isTargetArch = meta.arch === arch;
     let shouldKeep = isTargetPlatform && isTargetArch;
 
-    if (shouldKeep && mode === 'cpu-only' && targetCpu) {
+    // In cpu-only mode, keep only baseline CPU variant when it exists.
+    // If it does not exist for this version naming, gracefully fall back to
+    // same-platform+arch variants instead of deleting everything.
+    if (shouldKeep && mode === 'cpu-only' && targetCpu && hasTargetCpuVariant) {
       shouldKeep = entry === targetCpu;
     }
 
@@ -542,4 +565,10 @@ exports.default = async function afterPack(context) {
   }
 
   summarizeTopLevelNodeModules(dest);
+};
+
+// Test-only exports for unit validation of pruning logic.
+exports.__test__ = {
+  cleanupNodeLlamaPackages,
+  parseNodeLlamaVariant,
 };
