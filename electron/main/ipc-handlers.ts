@@ -160,7 +160,7 @@ export function registerIpcHandlers(
   registerClawHubHandlers(clawHubService);
 
   // OpenClaw handlers
-  registerOpenClawHandlers();
+  registerOpenClawHandlers(gatewayManager);
 
   // Provider handlers
   registerProviderHandlers(gatewayManager);
@@ -1486,7 +1486,7 @@ function registerGatewayHandlers(
  * OpenClaw-related IPC handlers
  * For checking package status and channel configuration
  */
-function registerOpenClawHandlers(): void {
+function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
   async function ensureDingTalkPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
     const targetDir = join(homedir(), '.openclaw', 'extensions', 'dingtalk');
     const targetManifest = join(targetDir, 'openclaw.plugin.json');
@@ -1599,9 +1599,12 @@ function registerOpenClawHandlers(): void {
           };
         }
         await saveChannelConfig(channelType, config);
-        logger.info(
-          `Skipping app-forced Gateway restart after channel:saveConfig (${channelType}); Gateway handles channel config reload/restart internally`
-        );
+        if (gatewayManager.getStatus().state !== 'stopped') {
+          logger.info(`Scheduling Gateway reload after channel:saveConfig (${channelType})`);
+          gatewayManager.debouncedReload();
+        } else {
+          logger.info(`Gateway is stopped; skip immediate reload after channel:saveConfig (${channelType})`);
+        }
         return {
           success: true,
           pluginInstalled: installResult.installed,
@@ -1609,12 +1612,12 @@ function registerOpenClawHandlers(): void {
         };
       }
       await saveChannelConfig(channelType, config);
-      // Do not force stop/start here. Recent Gateway builds detect channel config
-      // changes and perform an internal service restart; forcing another restart
-      // from Electron can race with reconnect and kill the newly spawned process.
-      logger.info(
-        `Skipping app-forced Gateway restart after channel:saveConfig (${channelType}); waiting for Gateway internal channel reload`
-      );
+      if (gatewayManager.getStatus().state !== 'stopped') {
+        logger.info(`Scheduling Gateway reload after channel:saveConfig (${channelType})`);
+        gatewayManager.debouncedReload();
+      } else {
+        logger.info(`Gateway is stopped; skip immediate reload after channel:saveConfig (${channelType})`);
+      }
       return { success: true };
     } catch (error) {
       console.error('Failed to save channel config:', error);
@@ -1648,6 +1651,12 @@ function registerOpenClawHandlers(): void {
   ipcMain.handle('channel:deleteConfig', async (_, channelType: string) => {
     try {
       await deleteChannelConfig(channelType);
+      if (gatewayManager.getStatus().state !== 'stopped') {
+        logger.info(`Scheduling Gateway reload after channel:deleteConfig (${channelType})`);
+        gatewayManager.debouncedReload();
+      } else {
+        logger.info(`Gateway is stopped; skip immediate reload after channel:deleteConfig (${channelType})`);
+      }
       return { success: true };
     } catch (error) {
       console.error('Failed to delete channel config:', error);
@@ -1670,6 +1679,12 @@ function registerOpenClawHandlers(): void {
   ipcMain.handle('channel:setEnabled', async (_, channelType: string, enabled: boolean) => {
     try {
       await setChannelEnabled(channelType, enabled);
+      if (gatewayManager.getStatus().state !== 'stopped') {
+        logger.info(`Scheduling Gateway reload after channel:setEnabled (${channelType}, enabled=${enabled})`);
+        gatewayManager.debouncedReload();
+      } else {
+        logger.info(`Gateway is stopped; skip immediate reload after channel:setEnabled (${channelType})`);
+      }
       return { success: true };
     } catch (error) {
       console.error('Failed to set channel enabled:', error);
