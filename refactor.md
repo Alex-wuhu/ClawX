@@ -107,7 +107,28 @@ This branch captures local refactors focused on frontend UX polish, IPC call con
   - avoids UI flashing to zero counts / empty configured state
 - Added automatic refresh once Gateway transitions back to `running`.
 
-### 14. Configure-but-disable support
-- Added enable toggle in channel setup dialog (`Enable Channel`).
-- Save flow now persists `enabled` with configuration payload.
-- Existing config load now reads `enabled` state and pre-fills toggle accordingly.
+### 14. Channel enable/disable UX rollback
+- Rolled back renderer-side channel enable/disable controls due to multi-channel state mixing risk.
+- Removed channel-card toggle entry point and setup-dialog enable switch.
+- Restored stable channel configuration flow (save/delete + refresh consistency).
+
+### 15. Cron i18n completion and consistency
+- Replaced remaining hardcoded Cron UI strings with i18n keys:
+  - dialog actions (`Cancel`, `Saving...`)
+  - card actions (`Edit`, `Delete`)
+  - trigger failure message
+  - confirm dialog namespace usage (`common:actions.*`)
+- Refactored cron schedule display parser to return localized strings instead of hardcoded English.
+- Added new locale keys in EN/ZH/JA:
+  - `toast.failedTrigger`
+  - `schedule.everySeconds/everyMinutes/everyHours/everyDays/onceAt/weeklyAt/monthlyAtDay/dailyAt/unknown`
+
+### 16. Gateway log noise reduction
+- Added stderr classification downgrade for expected loopback websocket transient logs:
+  - `[ws] handshake timeout ... remote=127.0.0.1`
+  - `[ws] closed before connect ... remote=127.0.0.1`
+- These lines now log at debug level instead of warn during reload/reconnect windows.
+
+### 17. External gateway shutdown compatibility
+- Added capability cache for externally managed Gateway shutdown RPC.
+- If `shutdown` is unsupported (`unknown method: shutdown`), mark it unsupported and skip future shutdown RPC attempts to avoid repeated warnings.
