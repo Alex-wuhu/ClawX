@@ -7,6 +7,7 @@ import { getProviderEnvVar, getKeyableProviderTypes } from '../utils/provider-re
 import { getOpenClawDir, getOpenClawEntryPath, isOpenClawPresent } from '../utils/paths';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { listConfiguredChannels } from '../utils/channel-config';
+import { ensureFeishuPluginInstalled } from '../utils/channel-plugin-install';
 import { syncGatewayTokenToConfig, syncBrowserConfigToOpenClaw, sanitizeOpenClawConfig } from '../utils/openclaw-auth';
 import { buildProxyEnv, resolveProxySettings } from '../utils/proxy';
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
@@ -29,6 +30,18 @@ export async function syncGatewayConfigBeforeLaunch(
   appSettings: Awaited<ReturnType<typeof getAllSettings>>,
 ): Promise<void> {
   await syncProxyConfigToOpenClaw(appSettings);
+
+  try {
+    const configuredChannels = await listConfiguredChannels();
+    if (configuredChannels.includes('feishu')) {
+      const installResult = await ensureFeishuPluginInstalled();
+      if (!installResult.installed) {
+        logger.warn(installResult.warning || 'Failed to ensure Feishu plugin is installed before Gateway launch');
+      }
+    }
+  } catch (err) {
+    logger.warn('Failed to ensure Feishu plugin is installed before Gateway launch:', err);
+  }
 
   try {
     await sanitizeOpenClawConfig();

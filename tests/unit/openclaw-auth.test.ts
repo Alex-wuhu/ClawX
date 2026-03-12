@@ -36,6 +36,11 @@ async function writeOpenClawJson(config: unknown): Promise<void> {
   await writeFile(join(openclawDir, 'openclaw.json'), JSON.stringify(config, null, 2), 'utf8');
 }
 
+async function readOpenClawJson(): Promise<Record<string, unknown>> {
+  const content = await readFile(join(testHome, '.openclaw', 'openclaw.json'), 'utf8');
+  return JSON.parse(content) as Record<string, unknown>;
+}
+
 async function readAuthProfiles(agentId: string): Promise<Record<string, unknown>> {
   const content = await readFile(join(testHome, '.openclaw', 'agents', agentId, 'agent', 'auth-profiles.json'), 'utf8');
   return JSON.parse(content) as Record<string, unknown>;
@@ -109,5 +114,64 @@ describe('saveProviderKeyToOpenClaw', () => {
     );
 
     logSpy.mockRestore();
+  });
+});
+
+describe('sanitizeOpenClawConfig', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    await rm(testHome, { recursive: true, force: true });
+    await rm(testUserData, { recursive: true, force: true });
+  });
+
+  it('normalizes legacy Feishu plugin config and mirrors default credentials', async () => {
+    await writeOpenClawJson({
+      channels: {
+        feishu: {
+          accounts: {
+            default: {
+              appId: 'cli_a',
+              appSecret: 'secret_b',
+              domain: 'feishu',
+            },
+          },
+        },
+      },
+      plugins: {
+        enabled: false,
+        allow: ['feishu'],
+        entries: {
+          feishu: { enabled: false },
+        },
+      },
+    });
+
+    const { sanitizeOpenClawConfig } = await import('@electron/utils/openclaw-auth');
+    await sanitizeOpenClawConfig();
+
+    const result = await readOpenClawJson();
+    expect(result.plugins).toEqual({
+      enabled: true,
+      allow: ['feishu-openclaw-plugin'],
+      entries: {
+        'feishu-openclaw-plugin': { enabled: true },
+      },
+    });
+
+    expect(result.channels).toEqual({
+      feishu: {
+        accounts: {
+          default: {
+            appId: 'cli_a',
+            appSecret: 'secret_b',
+            domain: 'feishu',
+          },
+        },
+        appId: 'cli_a',
+        appSecret: 'secret_b',
+        domain: 'feishu',
+      },
+    });
   });
 });

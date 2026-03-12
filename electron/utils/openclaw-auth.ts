@@ -26,6 +26,7 @@ import {
 
 const AUTH_STORE_VERSION = 1;
 const AUTH_PROFILE_FILENAME = 'auth-profiles.json';
+const FEISHU_PLUGIN_ID = 'feishu-openclaw-plugin';
 
 function getOAuthPluginId(provider: string): string {
   return `${provider}-auth`;
@@ -1026,10 +1027,49 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
   if (channelsObj && typeof channelsObj === 'object') {
     for (const [channelType, section] of Object.entries(channelsObj)) {
       if (!section || typeof section !== 'object') continue;
+
+      if (channelType === 'feishu') {
+        const pluginsObj = !config.plugins || (typeof config.plugins === 'object' && !Array.isArray(config.plugins))
+          ? ((config.plugins as Record<string, unknown> | undefined) || {})
+          : null;
+        if (pluginsObj) {
+          const allow = Array.isArray(pluginsObj.allow) ? [...pluginsObj.allow as string[]] : [];
+          const normalizedAllow = allow.filter((pluginId) => pluginId !== 'feishu');
+          if (!normalizedAllow.includes(FEISHU_PLUGIN_ID)) {
+            normalizedAllow.push(FEISHU_PLUGIN_ID);
+          }
+
+          const entries = (
+            pluginsObj.entries && typeof pluginsObj.entries === 'object' && !Array.isArray(pluginsObj.entries)
+              ? pluginsObj.entries as Record<string, Record<string, unknown>>
+              : {}
+          );
+          const currentFeishuPluginEntry = entries[FEISHU_PLUGIN_ID];
+          const nextFeishuPluginEntry = currentFeishuPluginEntry?.enabled === true
+            ? currentFeishuPluginEntry
+            : { ...(currentFeishuPluginEntry || {}), enabled: true };
+
+          if (
+            pluginsObj.enabled !== true
+            || normalizedAllow.length !== allow.length
+            || normalizedAllow.some((pluginId, index) => pluginId !== allow[index])
+            || nextFeishuPluginEntry !== currentFeishuPluginEntry
+          ) {
+            pluginsObj.enabled = true;
+            pluginsObj.allow = normalizedAllow;
+            entries[FEISHU_PLUGIN_ID] = nextFeishuPluginEntry;
+            pluginsObj.entries = entries;
+            config.plugins = pluginsObj;
+            modified = true;
+            console.log('[sanitize] Normalized Feishu plugin allowlist and enabled official plugin entry');
+          }
+        }
+      }
+
       const accounts = section.accounts as Record<string, Record<string, unknown>> | undefined;
       const defaultAccount = accounts?.default;
       if (!defaultAccount || typeof defaultAccount !== 'object') continue;
-      // Mirror each missing key from accounts.default to the top level
+
       let mirrored = false;
       for (const [key, value] of Object.entries(defaultAccount)) {
         if (!(key in section)) {

@@ -33,6 +33,7 @@ import {
 import { checkUvInstalled, installUv, setupManagedPython } from '../utils/uv-setup';
 import { updateSkillConfig, getSkillConfig, getAllSkillConfigs } from '../utils/skill-config';
 import { whatsAppLoginManager } from '../utils/whatsapp-login';
+import { ensureFeishuPluginInstalled } from '../utils/channel-plugin-install';
 import { getProviderConfig } from '../utils/provider-registry';
 import { deviceOAuthManager, OAuthProviderType } from '../utils/device-oauth';
 import { browserOAuthManager, type BrowserOAuthProviderType } from '../utils/browser-oauth';
@@ -1605,6 +1606,22 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
         } else {
           logger.info(`Gateway is stopped; skip immediate reload after channel:saveConfig (${channelType})`);
         }
+        return {
+          success: true,
+          pluginInstalled: installResult.installed,
+          warning: installResult.warning,
+        };
+      }
+      if (channelType === 'feishu') {
+        const installResult = await ensureFeishuPluginInstalled();
+        if (!installResult.installed) {
+          return {
+            success: false,
+            error: installResult.warning || 'Feishu plugin install failed',
+          };
+        }
+        await saveChannelConfig(channelType, config);
+        scheduleGatewayChannelRestart(`channel:saveConfig (${channelType})`);
         return {
           success: true,
           pluginInstalled: installResult.installed,

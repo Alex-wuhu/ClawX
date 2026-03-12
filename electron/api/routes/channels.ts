@@ -13,6 +13,7 @@ import {
   validateChannelCredentials,
 } from '../../utils/channel-config';
 import { clearAllBindingsForChannel } from '../../utils/agent-config';
+import { ensureFeishuPluginInstalled } from '../../utils/channel-plugin-install';
 import { whatsAppLoginManager } from '../../utils/whatsapp-login';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
@@ -104,47 +105,6 @@ async function ensureWeComPluginInstalled(): Promise<{ installed: boolean; warni
     return { installed: true };
   } catch {
     return { installed: false, warning: 'Failed to install bundled WeCom plugin mirror' };
-  }
-}
-
-async function ensureFeishuPluginInstalled(): Promise<{ installed: boolean; warning?: string }> {
-  const targetDir = join(homedir(), '.openclaw', 'extensions', 'feishu-openclaw-plugin');
-  const targetManifest = join(targetDir, 'openclaw.plugin.json');
-
-  if (existsSync(targetManifest)) {
-    return { installed: true };
-  }
-
-  const candidateSources = app.isPackaged
-    ? [
-      join(process.resourcesPath, 'openclaw-plugins', 'feishu-openclaw-plugin'),
-      join(process.resourcesPath, 'app.asar.unpacked', 'build', 'openclaw-plugins', 'feishu-openclaw-plugin'),
-      join(process.resourcesPath, 'app.asar.unpacked', 'openclaw-plugins', 'feishu-openclaw-plugin'),
-    ]
-    : [
-      join(app.getAppPath(), 'build', 'openclaw-plugins', 'feishu-openclaw-plugin'),
-      join(process.cwd(), 'build', 'openclaw-plugins', 'feishu-openclaw-plugin'),
-      join(__dirname, '../../../build/openclaw-plugins/feishu-openclaw-plugin'),
-    ];
-
-  const sourceDir = candidateSources.find((dir) => existsSync(join(dir, 'openclaw.plugin.json')));
-  if (!sourceDir) {
-    return {
-      installed: false,
-      warning: `Bundled Feishu plugin mirror not found. Checked: ${candidateSources.join(' | ')}`,
-    };
-  }
-
-  try {
-    mkdirSync(join(homedir(), '.openclaw', 'extensions'), { recursive: true });
-    rmSync(targetDir, { recursive: true, force: true });
-    cpSync(sourceDir, targetDir, { recursive: true, dereference: true });
-    if (!existsSync(targetManifest)) {
-      return { installed: false, warning: 'Failed to install Feishu plugin mirror (manifest missing).' };
-    }
-    return { installed: true };
-  } catch {
-    return { installed: false, warning: 'Failed to install bundled Feishu plugin mirror' };
   }
 }
 
